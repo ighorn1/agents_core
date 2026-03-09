@@ -8,7 +8,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 300
 MAX_HISTORY = 20  # messages conservés dans le contexte
 
 
