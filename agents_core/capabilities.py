@@ -63,6 +63,8 @@ class CapabilitiesRegistry:
         logger.debug(f"[Registry] Capacités mises à jour pour {caps.agent_id}")
 
     def update_from_json(self, data: str | bytes) -> Optional[AgentCapabilities]:
+        if not data or (isinstance(data, (str, bytes)) and not data.strip()):
+            return None  # Empty retained message — ignore silently
         try:
             caps = AgentCapabilities.from_json(data)
             self.update(caps)

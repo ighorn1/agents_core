@@ -187,8 +187,12 @@ class _SlixClient(ClientXMPP):
             logger.warning(f"[XMPP] OMEMO non disponible : {e}")
 
     def start(self):
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self.loop = loop
         self.connect()
-        self.process(forever=True)
+        loop.run_forever()
 
     async def _on_session_start(self, event):
         self.send_presence()
@@ -197,7 +201,6 @@ class _SlixClient(ClientXMPP):
             self.plugin["xep_0045"].join_muc(
                 room=self._muc_room,
                 nick=self._muc_nick,
-                wait=True,
             )
         if self._on_connected_cb:
             self._on_connected_cb()
@@ -217,5 +220,10 @@ class _SlixClient(ClientXMPP):
                 self._on_message_cb(str(msg["from"]), body, is_muc=True)
 
     def send_xmpp_message(self, to: str, body: str, is_muc: bool = False):
+        import functools
         msg_type = "groupchat" if is_muc else "chat"
-        self.send_message(mto=to, mbody=body, mtype=msg_type)
+        fn = functools.partial(self.send_message, mto=to, mbody=body, mtype=msg_type)
+        if hasattr(self, 'loop') and self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(fn)
+        else:
+            fn()
