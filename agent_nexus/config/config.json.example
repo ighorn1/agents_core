@@ -1,0 +1,29 @@
+{
+  "agent_id": "nexus",
+  "mqtt": {
+    "host": "localhost",
+    "port": 1883,
+    "username": null,
+    "password": null,
+    "tls": false
+  },
+  "xmpp": {
+    "jid": "nexus@xmpp.example.com",
+    "password": "CHANGE_ME",
+    "admin_jids": ["admin@xmpp.example.com"],
+    "muc_room": "agents@muc.xmpp.example.com",
+    "use_omemo": false
+  },
+  "llm": {
+    "base_url": "http://localhost:11434",
+    "model": "mistral:latest",
+    "temperature": 0.3
+  },
+  "llm_profiles": {
+    "local": "mistral:latest",
+    "powerful": "mixtral:8x7b"
+  },
+  "queue_db": "/opt/agent_nexus/data/queue.db",
+  "system_prompt": "config/system_prompt.txt",
+  "work_hours": "00:00-23:59"
+}
