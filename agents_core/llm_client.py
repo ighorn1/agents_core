@@ -1,54 +1,55 @@
 """
-Wrapper Ollama — interface unifiée pour le LLM local.
+Wrapper Anthropic Claude — interface unifiée pour le LLM cloud.
 """
 import json
 import logging
-import requests
 from typing import Optional
+
+import anthropic
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 300
 MAX_HISTORY = 20  # messages conservés dans le contexte
 
 
 class LLMClient:
-    def __init__(self, base_url: str, model: str, temperature: float = 0.3,
-                 system_prompt: str = ""):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-opus-4-6",
+                 temperature: float = 0.3, system_prompt: str = ""):
         self.model = model
         self.temperature = temperature
         self.system_prompt = system_prompt
         self._history: list[dict] = []
+        self._client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     def chat(self, user_message: str, extra_context: Optional[str] = None) -> str:
         """Envoie un message et retourne la réponse du LLM."""
-        messages = []
-
         # System prompt enrichi avec contexte dynamique si fourni
         system = self.system_prompt
         if extra_context:
             system = f"{system}\n\n[CONTEXTE ACTUEL]\n{extra_context}"
-        if system:
-            messages.append({"role": "system", "content": system})
 
-        # Historique tronqué
-        messages.extend(self._history[-MAX_HISTORY:])
+        # Historique tronqué (format Anthropic : system est un paramètre séparé)
+        messages = list(self._history[-MAX_HISTORY:])
         messages.append({"role": "user", "content": user_message})
 
+        create_kwargs = dict(
+            model=self.model,
+            max_tokens=4096,
+            messages=messages,
+            thinking={"type": "adaptive"},
+        )
+        if system:
+            create_kwargs["system"] = system
+
         try:
-            resp = requests.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"temperature": self.temperature},
-                },
-                timeout=DEFAULT_TIMEOUT,
+            with self._client.messages.stream(**create_kwargs) as stream:
+                response = stream.get_final_message()
+
+            # Extraire le texte de la réponse (on ignore les blocs thinking)
+            assistant_msg = next(
+                (block.text for block in response.content if block.type == "text"),
+                "",
             )
-            resp.raise_for_status()
-            assistant_msg = resp.json()["message"]["content"]
 
             # Mise à jour de l'historique
             self._history.append({"role": "user", "content": user_message})
@@ -56,9 +57,12 @@ class LLMClient:
 
             return assistant_msg
 
-        except requests.exceptions.Timeout:
-            logger.error("LLM timeout")
-            return "Erreur : le LLM n'a pas répondu dans les temps."
+        except anthropic.APIStatusError as e:
+            logger.error(f"Erreur API Anthropic ({e.status_code}): {e.message}")
+            return f"Erreur LLM: {e.message}"
+        except anthropic.APIConnectionError as e:
+            logger.error(f"Erreur connexion Anthropic: {e}")
+            return "Erreur : impossible de joindre l'API Anthropic."
         except Exception as e:
             logger.error(f"Erreur LLM: {e}")
             return f"Erreur LLM: {e}"

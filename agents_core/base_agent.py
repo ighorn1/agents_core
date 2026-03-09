@@ -147,8 +147,8 @@ class BaseAgent(ABC):
     def _setup_llm(self) -> LLMClient:
         lc = self.config.get("llm", {})
         return LLMClient(
-            base_url=lc.get("base_url", "http://localhost:11434"),
-            model=lc.get("model", "mistral"),
+            api_key=lc.get("api_key"),
+            model=lc.get("model", "claude-opus-4-6"),
             temperature=lc.get("temperature", 0.3),
             system_prompt=self._load_system_prompt(),
         )
