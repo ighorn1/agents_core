@@ -8,3 +8,4 @@ data/
 *.egg-info/
 .vault_pass
 config/config.json
+build/
