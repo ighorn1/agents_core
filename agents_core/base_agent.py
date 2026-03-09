@@ -100,6 +100,7 @@ class BaseAgent(ABC):
         # Agents en ligne (mis à jour via MQTT)
         self._online_agents: set[str] = set()
         self._online_lock = threading.Lock()
+        self._llm_lock = threading.Lock()  # Empêche les appels LLM concurrents
 
         self._running = False
 
@@ -437,11 +438,18 @@ class BaseAgent(ABC):
                 self.xmpp.send_message(sender, f"Broadcast envoyé à tous les agents.")
             return
 
-        # Mode naturel → LLM
-        extra_ctx = self.registry.summary_for_llm(self._online_agents)
-        response = self._llm_loop(body, context, extra_ctx)
-        if self.xmpp:
-            self.xmpp.send_message(sender, response)
+        # Mode naturel → LLM (un seul appel à la fois)
+        if not self._llm_lock.acquire(blocking=False):
+            if self.xmpp:
+                self.xmpp.send_message(sender, "⏳ Je traite déjà une demande, attends un instant.")
+            return
+        try:
+            extra_ctx = self.registry.summary_for_llm(self._online_agents)
+            response = self._llm_loop(body, context, extra_ctx)
+            if self.xmpp:
+                self.xmpp.send_message(sender, response)
+        finally:
+            self._llm_lock.release()
 
     def _route_direct_command(self, cmd: ParsedCommand) -> str:
         """Route un @agent commande vers l'agent cible via MQTT."""
