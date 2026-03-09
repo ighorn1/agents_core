@@ -195,7 +195,7 @@ class BaseAgent(ABC):
         # Connexion XMPP
         if self.xmpp:
             self.xmpp.set_message_callback(self._on_xmpp_message)
-            self.xmpp.connect_async(on_ready=self.on_xmpp_connected)
+            self.xmpp.connect_async()
 
         # Démarrage du worker de tâches
         self.queue.start_worker(self._execute_task)
@@ -297,34 +297,14 @@ class BaseAgent(ABC):
                 return
             agent_id = data.get("agent_id")
             status = data.get("status")
-            if not agent_id or not status:
-                return
-            # Ignorer nos propres messages de statut
-            if agent_id == self.agent_id:
-                return
-            with self._online_lock:
-                was_online = agent_id in self._online_agents
-                if status == "online":
-                    self._online_agents.add(agent_id)
-                else:
-                    self._online_agents.discard(agent_id)
-                is_online = agent_id in self._online_agents
-            # Appel du hook seulement si le statut a changé
-            if was_online != is_online:
-                try:
-                    self.on_agent_status_change(agent_id, status)
-                except Exception as e:
-                    logger.debug(f"on_agent_status_change error: {e}")
+            if agent_id and status:
+                with self._online_lock:
+                    if status == "online":
+                        self._online_agents.add(agent_id)
+                    else:
+                        self._online_agents.discard(agent_id)
         except Exception:
             pass
-
-    def on_agent_status_change(self, agent_id: str, status: str):
-        """
-        Hook appelé en temps réel quand un agent change de statut.
-        status = "online" | "offline"
-        À surcharger dans les sous-classes pour réagir aux changements.
-        """
-        pass
 
     # ──────────────────────────────────────────────
     # Traitement des tâches
@@ -505,10 +485,6 @@ class BaseAgent(ABC):
 
     def on_start(self):
         """Hook appelé après le démarrage complet. Surcharger si besoin."""
-        pass
-
-    def on_xmpp_connected(self):
-        """Hook appelé une fois la connexion XMPP établie. Surcharger si besoin."""
         pass
 
     def on_broadcast(self, msg: Message):

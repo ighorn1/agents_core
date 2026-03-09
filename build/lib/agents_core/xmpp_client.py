@@ -70,11 +70,8 @@ class XMPPClient:
         bare = jid.lower().split("/")[0]
         return bare in self.admin_jids
 
-    def connect_async(self, on_ready: Optional[Callable] = None):
-        """Connexion XMPP dans un thread dédié.
-        on_ready() est appelé une fois la connexion établie.
-        """
-        self._on_ready_cb = on_ready
+    def connect_async(self):
+        """Connexion XMPP dans un thread dédié."""
         self._client = _SlixClient(
             jid=self.jid,
             password=self.password,
@@ -99,11 +96,6 @@ class XMPPClient:
                 logger.info(f"[XMPP] Groupe rejoint : {self.muc_room}")
             if self.admin_jids:
                 logger.info(f"[XMPP] Admins autorisés : {', '.join(sorted(self.admin_jids))}")
-            if self._on_ready_cb:
-                try:
-                    self._on_ready_cb()
-                except Exception as e:
-                    logger.error(f"[XMPP] Erreur on_ready callback : {e}")
         else:
             logger.warning("[XMPP] Timeout connexion")
 

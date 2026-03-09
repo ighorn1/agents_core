@@ -131,24 +131,15 @@ class MQTTClient:
             return
 
         try:
-            raw_str = mqtt_msg.payload.decode()
-            # Tente de parser comme Message structuré seulement si
-            # le JSON contient les champs attendus (type ou sender)
-            parsed = json.loads(raw_str)
-            if isinstance(parsed, dict) and ("type" in parsed or "sender" in parsed):
-                msg = Message.from_json(raw_str)
-                callback(msg, topic)
-            else:
-                # Payload JSON simple (ex: statut, capacités) → passe la string brute
-                callback(raw_str, topic)
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            msg = Message.from_json(mqtt_msg.payload)
+            callback(msg, topic)
+        except Exception as e:
             # Payload non-JSON (ex: commande shell brute)
+            logger.debug(f"[{self.agent_id}] Payload non-JSON sur {topic}: {e}")
             try:
                 callback(mqtt_msg.payload.decode(), topic)
             except Exception as e2:
                 logger.error(f"[{self.agent_id}] Erreur callback sur {topic}: {e2}")
-        except Exception as e:
-            logger.error(f"[{self.agent_id}] Erreur callback sur {topic}: {e}")
 
     @staticmethod
     def _topic_matches(pattern: str, topic: str) -> bool:
