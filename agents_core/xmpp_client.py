@@ -129,10 +129,19 @@ class XMPPClient:
             logger.debug(f"[XMPP] Message ignoré (non autorisé) : {sender}")
             return
         if self._message_callback:
-            try:
-                self._message_callback(sender, body, is_muc)
-            except Exception as e:
-                logger.error(f"[XMPP] Erreur callback : {e}")
+            # Dispatch dans un thread pour ne pas bloquer la boucle asyncio XMPP
+            threading.Thread(
+                target=self._dispatch_callback,
+                args=(sender, body, is_muc),
+                daemon=True,
+                name="xmpp-handler",
+            ).start()
+
+    def _dispatch_callback(self, sender: str, body: str, is_muc: bool):
+        try:
+            self._message_callback(sender, body, is_muc)
+        except Exception as e:
+            logger.error(f"[XMPP] Erreur callback : {e}")
 
     def send_message(self, to: str, body: str, is_muc: bool = False):
         """Envoie un message XMPP (direct ou MUC)."""
