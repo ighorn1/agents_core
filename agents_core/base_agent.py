@@ -80,7 +80,8 @@ class BaseAgent(ABC):
     DEFAULT_CONFIG_PATH: str = "config/config.json"
 
     def __init__(self, config_path: Optional[str] = None):
-        self.config = self._load_config(config_path or self.DEFAULT_CONFIG_PATH)
+        self._config_path = config_path or self.DEFAULT_CONFIG_PATH
+        self.config = self._load_config(self._config_path)
         self.agent_id: str = self.config["agent_id"]
 
         logging.basicConfig(
@@ -233,6 +234,7 @@ class BaseAgent(ABC):
         self.mqtt.subscribe_broadcast(self._on_mqtt_broadcast)
         self.mqtt.subscribe_all_capabilities(self._on_capabilities_update)
         self.mqtt.subscribe_all_status(self._on_status_update)
+        self.mqtt.subscribe("agents/llm/switch", self._on_llm_switch)
         # Souscriptions custom de l'agent
         self.setup_extra_subscriptions()
 
@@ -283,6 +285,36 @@ class BaseAgent(ABC):
                 self._refresh_llm_context()
         except Exception as e:
             logger.debug(f"Erreur parsing capabilities: {e}")
+
+    def _on_llm_switch(self, msg: Message | str, topic: str):
+        """Reçoit un ordre de switch LLM depuis le topic agents/llm/switch."""
+        try:
+            import json as _json
+            raw = msg if isinstance(msg, str) else (msg.payload if isinstance(msg, Message) else str(msg))
+            data = _json.loads(raw)
+            model = data.get("model")
+            profile = data.get("profile", "")
+            if not model:
+                return
+            if self.llm.model == model:
+                return  # Déjà sur ce modèle
+            self.llm.model = model
+            self.config["llm"]["model"] = model
+            profiles = self.config.setdefault("llm_profiles", {})
+            if profile:
+                profiles[profile] = model
+            self._save_config()
+            logger.info(f"[LLM] Modèle changé → {model} (profil: {profile or 'direct'})")
+        except Exception as e:
+            logger.error(f"[LLM] Erreur switch: {e}")
+
+    def _save_config(self):
+        """Persiste la config en mémoire dans le fichier JSON."""
+        try:
+            with open(self._config_path, "w") as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Erreur sauvegarde config ({self._config_path}): {e}")
 
     def _on_status_update(self, msg: Message | str, topic: str):
         """Mise à jour du statut d'un agent."""
