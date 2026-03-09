@@ -7,7 +7,7 @@ setup(
     install_requires=[
         "paho-mqtt>=1.6",
         "slixmpp>=1.8",
-        "requests>=2.28",
+        "anthropic>=0.40",
     ],
     extras_require={
         "omemo": ["slixmpp-omemo>=1.0"],
