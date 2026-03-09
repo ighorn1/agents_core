@@ -71,41 +71,57 @@ class XMPPClient:
         return bare in self.admin_jids
 
     def connect_async(self, on_ready: Optional[Callable] = None):
-        """Connexion XMPP dans un thread dédié.
-        on_ready() est appelé une fois la connexion établie.
-        """
+        """Connexion XMPP dans un thread dédié avec reconnexion automatique."""
         self._on_ready_cb = on_ready
-        self._client = _SlixClient(
-            jid=self.jid,
-            password=self.password,
-            muc_room=self.muc_room,
-            muc_nick=self.muc_nick,
-            use_omemo=self.use_omemo,
-            on_message=self._on_message,
-            on_connected=self._connected.set,
-        )
-        self._thread = threading.Thread(
-            target=self._client.start,
-            daemon=True,
-            name="xmpp-client",
-        )
-        self._thread.start()
-        threading.Thread(target=self._wait_and_log, daemon=True).start()
+        self._stop_reconnect = False
+        threading.Thread(target=self._reconnect_loop, daemon=True, name="xmpp-reconnect").start()
 
-    def _wait_and_log(self):
-        if self._connected.wait(timeout=30):
-            logger.info(f"[XMPP] Connecté : {self.jid}")
-            if self.muc_room:
-                logger.info(f"[XMPP] Groupe rejoint : {self.muc_room}")
-            if self.admin_jids:
-                logger.info(f"[XMPP] Admins autorisés : {', '.join(sorted(self.admin_jids))}")
-            if self._on_ready_cb:
-                try:
-                    self._on_ready_cb()
-                except Exception as e:
-                    logger.error(f"[XMPP] Erreur on_ready callback : {e}")
-        else:
-            logger.warning("[XMPP] Timeout connexion")
+    def _reconnect_loop(self):
+        """Boucle de connexion/reconnexion XMPP."""
+        import time as _time
+        delay = 5
+        first = True
+        while not self._stop_reconnect:
+            self._connected.clear()
+            try:
+                self._client = _SlixClient(
+                    jid=self.jid,
+                    password=self.password,
+                    muc_room=self.muc_room,
+                    muc_nick=self.muc_nick,
+                    use_omemo=self.use_omemo,
+                    on_message=self._on_message,
+                    on_connected=self._connected.set,
+                )
+                # Lance la connexion dans ce thread (bloquant)
+                t = threading.Thread(target=self._client.start, daemon=True, name="xmpp-client")
+                t.start()
+
+                if self._connected.wait(timeout=30):
+                    logger.info(f"[XMPP] Connecté : {self.jid}")
+                    if self.muc_room:
+                        logger.info(f"[XMPP] Groupe rejoint : {self.muc_room}")
+                    if self.admin_jids:
+                        logger.info(f"[XMPP] Admins autorisés : {', '.join(sorted(self.admin_jids))}")
+                    if first and self._on_ready_cb:
+                        first = False
+                        try:
+                            self._on_ready_cb()
+                        except Exception as e:
+                            logger.error(f"[XMPP] Erreur on_ready callback : {e}")
+                    delay = 5  # Reset du délai après succès
+                    t.join()   # Attend la fin de la session (déconnexion)
+                    if not self._stop_reconnect:
+                        logger.warning("[XMPP] Connexion perdue. Reconnexion dans 5s...")
+                else:
+                    logger.warning("[XMPP] Timeout connexion. Nouvelle tentative dans 10s...")
+                    delay = 10
+            except Exception as e:
+                logger.error(f"[XMPP] Erreur connexion : {e}. Retry dans {delay}s...")
+
+            if not self._stop_reconnect:
+                _time.sleep(delay)
+                delay = min(delay * 2, 60)  # Backoff exponentiel jusqu'à 60s
 
     def _on_message(self, sender: str, body: str, is_muc: bool):
         """Filtre les messages : seuls les admins sont traités (sauf MUC)."""
@@ -157,6 +173,7 @@ class XMPPClient:
         logger.info(f"[XMPP] Admin retiré : {bare}")
 
     def disconnect(self):
+        self._stop_reconnect = True
         if self._client:
             try:
                 self._client.disconnect()
