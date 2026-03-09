@@ -299,6 +299,7 @@ class BaseAgent(ABC):
             if self.llm.model == model:
                 return  # Déjà sur ce modèle
             self.llm.model = model
+            self.llm.reset_history()
             self.config["llm"]["model"] = model
             profiles = self.config.setdefault("llm_profiles", {})
             if profile:
@@ -410,6 +411,10 @@ class BaseAgent(ABC):
 
     def _on_xmpp_message(self, sender: str, body: str, is_muc: bool = False):
         """Traitement des messages XMPP entrants."""
+        # Les sub-agents ne traitent pas les messages MUC pour éviter les boucles.
+        # Seul Nexus override cette méthode pour gérer le MUC.
+        if is_muc:
+            return
         cmd = parse_command(body)
         context = AgentContext(self)
 
