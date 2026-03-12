@@ -212,6 +212,8 @@ class _SlixClient(ClientXMPP):
         self.add_event_handler("session_start",    self._on_session_start)
         self.add_event_handler("message",          self._on_message)
         self.add_event_handler("groupchat_message", self._on_muc_message)
+        self.add_event_handler("disconnected",     self._on_disconnected)
+        self.add_event_handler("connection_failed", self._on_disconnected)
 
     def _setup_omemo(self):
         try:
@@ -238,6 +240,10 @@ class _SlixClient(ClientXMPP):
             )
         if self._on_connected_cb:
             self._on_connected_cb()
+
+    def _on_disconnected(self, event):
+        if hasattr(self, 'loop') and self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
 
     def _on_message(self, msg):
         if msg["type"] in ("chat", "normal") and msg["body"]:
