@@ -173,6 +173,13 @@ class MQTTClient:
         self.client.subscribe(topic, qos=1)
         logger.debug(f"[{self.agent_id}] Abonné à {topic}")
 
+    def unsubscribe(self, topic: str):
+        """Se désabonner d'un topic."""
+        with self._lock:
+            self._subscriptions.pop(topic, None)
+        self.client.unsubscribe(topic)
+        logger.debug(f"[{self.agent_id}] Désabonné de {topic}")
+
     def subscribe_inbox(self, callback: Callable):
         """S'abonner à sa propre inbox."""
         self.subscribe(self.topic_inbox(), callback)
